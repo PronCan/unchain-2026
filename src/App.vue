@@ -264,7 +264,7 @@ const getActorColorClass = (roleId, actorName) => {
           class="px-6 py-3 font-medium text-sm transition-colors relative"
           :class="activeTab === 'schedule' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
         >
-          출연 일정 및 통계
+          출연 일정
           <div v-if="activeTab === 'schedule'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
         </button>
         <button
@@ -275,9 +275,17 @@ const getActorColorClass = (roleId, actorName) => {
           일정/좌석 정산
           <div v-if="activeTab === 'seat'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
         </button>
+        <button
+          @click="activeTab = 'stats'"
+          class="px-6 py-3 font-medium text-sm transition-colors relative"
+          :class="activeTab === 'stats' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
+        >
+          통계
+          <div v-if="activeTab === 'stats'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
+        </button>
       </div>
 
-      <!-- Tab 1: Schedule & Stats -->
+      <!-- Tab 1: Schedule -->
       <div v-if="activeTab === 'schedule'" class="space-y-6">
         <!-- Filter Section -->
         <div class="bg-[#333333] rounded-xl shadow-md p-6 border border-[#444444]">
@@ -422,33 +430,6 @@ const getActorColorClass = (roleId, actorName) => {
             </table>
           </div>
         </div>
-
-        <!-- Stats Section -->
-        <div class="bg-[#333333] rounded-xl shadow-md p-6 border border-[#444444]">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2 mb-6">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            {{ showData.title }} 출연 통계
-          </h2>
-          
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="role in roles" :key="role.id" class="bg-[#2a2a2a] rounded-lg p-4 border border-[#444444]">
-              <h3 class="font-bold text-gray-200 mb-3 border-b border-[#444444] pb-2">{{ role.name }}</h3>
-              <ul class="space-y-2">
-                <li v-for="actor in role.actors" :key="actor" class="flex justify-between items-center text-sm">
-                  <span class="text-gray-300">{{ actor }}</span>
-                  <div class="flex items-center gap-2">
-                    <div class="w-24 bg-[#444444] rounded-full h-2 overflow-hidden">
-                      <div class="bg-blue-500 h-full rounded-full" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
-                    </div>
-                    <span class="font-medium text-gray-100 w-12 text-right">{{ actorStats[role.id][actor] }}회</span>
-                  </div>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Tab 2: Seating Chart Section -->
@@ -572,6 +553,35 @@ const getActorColorClass = (roleId, actorName) => {
         </div>
 
         <SeatingChart />
+      </div>
+
+      <!-- Tab 3: Stats Section -->
+      <div v-if="activeTab === 'stats'" class="space-y-6">
+        <div class="bg-[#333333] rounded-xl shadow-md p-6 border border-[#444444]">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2 mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            {{ showData.title }} 출연 통계
+          </h2>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="role in roles" :key="role.id" class="bg-[#2a2a2a] rounded-lg p-4 border border-[#444444]">
+              <h3 class="font-bold text-gray-200 mb-3 border-b border-[#444444] pb-2">{{ role.name }}</h3>
+              <ul class="space-y-2">
+                <li v-for="actor in role.actors" :key="actor" class="flex justify-between items-center text-sm">
+                  <span class="text-gray-300">{{ actor }}</span>
+                  <div class="flex items-center gap-2">
+                    <div class="w-24 bg-[#444444] rounded-full h-2 overflow-hidden">
+                      <div class="bg-blue-500 h-full rounded-full" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
+                    </div>
+                    <span class="font-medium text-gray-100 w-12 text-right">{{ actorStats[role.id][actor] }}회</span>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>
