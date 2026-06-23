@@ -221,33 +221,6 @@ const actorStats = computed(() => {
   return stats
 })
 
-// 페어 통계용 선택된 마크
-const selectedMarkForStats = ref('')
-
-// 페어별 출연 횟수 계산
-const pairStats = computed(() => {
-  const stats = {}
-  
-  schedules.value.forEach(schedule => {
-    const mark = schedule.cast.mark
-    const singer = schedule.cast.singer
-    
-    if (!mark || !singer) return
-    
-    if (selectedMarkForStats.value && mark !== selectedMarkForStats.value) {
-      return
-    }
-    
-    const key = `${mark}|||${singer}`
-    if (!stats[key]) {
-      stats[key] = 0
-    }
-    stats[key]++
-  })
-  
-  return stats
-})
-
 // 배우별 고유 색상 가져오기
 const getActorColorClass = (roleId, actorName) => {
   const role = roles.value.find(r => r.id === roleId)
@@ -599,10 +572,19 @@ const getActorColorClass = (roleId, actorName) => {
                 <li v-for="actor in role.actors" :key="actor" class="flex justify-between items-center text-sm">
                   <span class="text-gray-300">{{ actor }}</span>
                   <div class="flex items-center gap-2">
-                    <div class="w-24 bg-[#444444] rounded-full h-2 overflow-hidden">
-                      <div class="bg-blue-500 h-full rounded-full" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
+                    <div class="relative group flex items-center">
+                      <div class="w-24 bg-[#444444] rounded-full h-2 overflow-hidden cursor-help">
+                        <div class="bg-blue-500 h-full rounded-full" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
+                      </div>
+                      <!-- Tooltip -->
+                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block z-10 pointer-events-none">
+                        <div class="bg-black text-white text-[10px] font-bold rounded py-1 px-2 whitespace-nowrap shadow-lg">
+                          {{ Math.round((actorStats[role.id][actor] / schedules.length) * 100) }}%
+                        </div>
+                        <div class="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-black absolute top-full left-1/2 -translate-x-1/2"></div>
+                      </div>
                     </div>
-                    <span class="font-medium text-gray-100 w-12 text-right">{{ actorStats[role.id][actor] }}회</span>
+                    <span class="font-medium text-gray-100 w-20 text-right">{{ actorStats[role.id][actor] }} / {{ schedules.length }} 회</span>
                   </div>
                 </li>
               </ul>
@@ -619,16 +601,9 @@ const getActorColorClass = (roleId, actorName) => {
             <table class="min-w-max w-full text-sm border-collapse mt-3">
               <thead>
                 <tr>
-                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">
-                    <select v-model="selectedMarkForStats" class="bg-[#333333] border border-[#555555] text-white text-sm rounded px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer">
-                      <option value="">마크 (전체)</option>
-                      <option v-for="actor in roles.find(r => r.id === 'mark')?.actors" :key="actor" :value="actor">
-                        {{ actor }}
-                      </option>
-                    </select>
-                  </th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">마크</th>
                   <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">싱어</th>
-                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">출연 횟수</th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">횟수</th>
                 </tr>
               </thead>
               <tbody>
