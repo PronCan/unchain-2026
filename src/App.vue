@@ -221,6 +221,33 @@ const actorStats = computed(() => {
   return stats
 })
 
+// 페어 통계용 선택된 마크
+const selectedMarkForStats = ref('')
+
+// 페어별 출연 횟수 계산
+const pairStats = computed(() => {
+  const stats = {}
+  
+  schedules.value.forEach(schedule => {
+    const mark = schedule.cast.mark
+    const singer = schedule.cast.singer
+    
+    if (!mark || !singer) return
+    
+    if (selectedMarkForStats.value && mark !== selectedMarkForStats.value) {
+      return
+    }
+    
+    const key = `${mark}|||${singer}`
+    if (!stats[key]) {
+      stats[key] = 0
+    }
+    stats[key]++
+  })
+  
+  return stats
+})
+
 // 배우별 고유 색상 가져오기
 const getActorColorClass = (roleId, actorName) => {
   const role = roles.value.find(r => r.id === roleId)
@@ -581,6 +608,45 @@ const getActorColorClass = (roleId, actorName) => {
               </ul>
             </div>
           </div>
+        <div class="mt-10">
+          <h3 class="font-bold text-white mb-4 text-base flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            마크&싱어 페어 출연 통계
+          </h3>
+          <div class="overflow-auto">
+            <table class="min-w-max w-full text-sm border-collapse mt-3">
+              <thead>
+                <tr>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">
+                    <select v-model="selectedMarkForStats" class="bg-[#333333] border border-[#555555] text-white text-sm rounded px-2 py-1 focus:outline-none focus:border-blue-500 cursor-pointer">
+                      <option value="">마크 (전체)</option>
+                      <option v-for="actor in roles.find(r => r.id === 'mark')?.actors" :key="actor" :value="actor">
+                        {{ actor }}
+                      </option>
+                    </select>
+                  </th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">싱어</th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">출연 횟수</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(count, key) in pairStats" :key="key" v-if="count > 0">
+                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
+                    {{ key.split('|||')[0] }}
+                  </td>
+                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
+                    {{ key.split('|||')[1] }}
+                  </td>
+                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
+                    {{ count }}회
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
         </div>
       </div>
 
