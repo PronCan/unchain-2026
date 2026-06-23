@@ -94,17 +94,17 @@ const getSeatStyle = (row, num) => {
 </script>
 
 <template>
-  <div class="bg-[#333333] rounded-xl shadow-md p-4 md:p-6 border border-[#444444] overflow-hidden">
-    <h2 class="text-lg font-bold text-white flex items-center gap-2 mb-2 md:mb-6">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <div class="seating-chart-card">
+    <h2 class="card-title">
+      <svg xmlns="http://www.w3.org/2000/svg" class="icon-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
       </svg>
       예스24 스테이지 2관 좌석 배치도
     </h2>
     
-    <p class="text-xs text-gray-400 mb-4 text-center md:hidden animate-pulse">👆 좌우로 스크롤하여 전체 좌석을 확인하세요</p>
+    <p class="mobile-scroll-hint">👆 좌우로 스크롤하여 전체 좌석을 확인하세요</p>
     
-    <div class="overflow-x-auto pb-4 flex md:justify-center">
+    <div class="chart-scroll-container">
       <div class="hm-outer" style="--hm-seat: 20px; --hm-gap: 3px; --hm-lbl: 20px; --hm-aisle: 16px; --hm-font: 8px;">
         <div class="hm-inner">
           <div class="hm-stage-bar">S T A G E</div>
@@ -119,18 +119,18 @@ const getSeatStyle = (row, num) => {
                 <div class="hm-block" :style="getBlockStyle(row.row, gIdx)">
                   <div style="display: flex; gap: var(--hm-gap, 2px);">
                     <div v-for="num in generateSeats(group[0], group[1])" :key="num" 
-                         class="hm-seat relative group"
+                         class="hm-seat"
                          :style="getSeatStyle(row.row, num)">
                       {{ num }}
                       <!-- Custom Tooltip -->
-                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block z-50 pointer-events-none">
-                        <div class="bg-black text-white text-[10px] font-bold rounded py-1.5 px-2.5 whitespace-nowrap shadow-lg text-center leading-tight">
+                      <div class="seat-tooltip">
+                        <div class="tooltip-content">
                           {{ row.row }}열 {{ num }}번
                           <template v-if="props.seatCounts[`${row.row}-${num}`]">
-                            <br/><span class="text-blue-300">{{ props.seatCounts[`${row.row}-${num}`] }}회 관람</span>
+                            <br/><span class="highlight-text">{{ props.seatCounts[`${row.row}-${num}`] }}회 관람</span>
                           </template>
                         </div>
-                        <div class="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] border-t-black absolute top-full left-1/2 -translate-x-1/2"></div>
+                        <div class="tooltip-arrow"></div>
                       </div>
                     </div>
                   </div>
@@ -146,7 +146,67 @@ const getSeatStyle = (row, num) => {
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+.seating-chart-card {
+  background-color: #333333;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  padding: 1rem;
+  border: 1px solid #444444;
+  overflow: hidden;
+
+  @media (min-width: 768px) {
+    padding: 1.5rem;
+  }
+}
+
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+
+  @media (min-width: 768px) {
+    margin-bottom: 1.5rem;
+  }
+}
+
+.icon-blue {
+  height: 1.25rem;
+  width: 1.25rem;
+  color: #60a5fa;
+}
+
+.mobile-scroll-hint {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+  text-align: center;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @media (min-width: 768px) {
+    display: none;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+.chart-scroll-container {
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  display: flex;
+
+  @media (min-width: 768px) {
+    justify-content: center;
+  }
+}
+
 .hm-outer {
   background: #2a2a2a;
   border-radius: 14px;
@@ -213,6 +273,7 @@ const getSeatStyle = (row, num) => {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
 }
 .hm-seat:hover {
   background: #3b82f6;
@@ -224,5 +285,50 @@ const getSeatStyle = (row, num) => {
   width: 100%;
   background: #555555;
   margin: 8px 0;
+}
+
+/* Tooltip Styles */
+.seat-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.375rem;
+  display: none;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.hm-seat:hover .seat-tooltip {
+  display: block;
+}
+
+.tooltip-content {
+  background-color: #000000;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.625rem;
+  white-space: nowrap;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.highlight-text {
+  color: #93c5fd;
+}
+
+.tooltip-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid #000000;
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
 }
 </style>

@@ -1,363 +1,17 @@
-<script setup>
-import { ref, computed } from 'vue'
-import { showData } from './data.js'
-import SeatingChart from './components/SeatingChart.vue'
+const fs = require('fs');
 
-const activeTab = ref('schedule') // 'schedule' | 'seat'
+const appVue = fs.readFileSync('src/App.vue', 'utf8');
 
-const schedules = ref(showData.schedules)
-const roles = ref(showData.roles)
-
-// 달력 상태 관리
-const now = new Date()
-const currentMonth = ref(new Date(now.getFullYear(), now.getMonth(), 1)) // 현재 월
-// const selectedDate = ref('2026-07-07')
-const today = () => {
-  const d = new Date()
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-const selectedDate = ref(today())
-
-// 내 일정(좌석) 상태 관리
-import { watch } from 'vue'
-
-const mySchedules = ref(JSON.parse(localStorage.getItem('unchain_my_schedules') || '[]')) // { date, time, seatRow, seatNum }
-
-// mySchedules가 변경될 때마다 localStorage에 저장
-watch(mySchedules, (newVal) => {
-  localStorage.setItem('unchain_my_schedules', JSON.stringify(newVal))
-}, { deep: true })
-
-const showSeatModal = ref(false)
-const selectedScheduleForSeat = ref(null)
-const seatInputRow = ref('')
-const seatInputNum = ref('')
-
-// 설정 및 백업 상태 관리
-const showSettingsModal = ref(false)
-const fileInputRef = ref(null)
-
-const exportData = () => {
-  const dataStr = JSON.stringify(mySchedules.value, null, 2)
-  const blob = new Blob([dataStr], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'unchain_my_schedules_backup.json'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+// Extract script setup
+const scriptMatch = appVue.match(/(<script setup>[\s\S]*?<\/script>)/);
+if (!scriptMatch) {
+    console.error("Could not find script setup");
+    process.exit(1);
 }
 
-const importData = (event) => {
-  const file = event.target.files[0]
-  if (!file) return
-  
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    try {
-      const parsed = JSON.parse(e.target.result)
-      if (Array.isArray(parsed)) {
-        mySchedules.value = parsed
-        alert('데이터를 성공적으로 불러왔습니다.')
-        showSettingsModal.value = false
-      } else {
-        alert('잘못된 데이터 형식입니다.')
-      }
-    } catch (error) {
-      alert('파일을 읽는 중 오류가 발생했습니다.')
-    }
-    // Reset file input
-    event.target.value = ''
-  }
-  reader.readAsText(file)
-}
+const scriptContent = scriptMatch[1];
 
-const handleRowInput = (e) => {
-  seatInputRow.value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase()
-}
-
-const handleNumInput = (e) => {
-  let val = e.target.value.replace(/[^0-9]/g, '')
-  // 0으로 시작하는 경우 0 제거 (양수만 허용)
-  if (val.startsWith('0')) {
-    val = val.replace(/^0+/, '')
-  }
-  seatInputNum.value = val
-}
-
-const openSeatModal = (schedule) => {
-  selectedScheduleForSeat.value = schedule
-  const existing = mySchedules.value.find(s => s.date === schedule.date && s.time === schedule.time)
-  if (existing) {
-    seatInputRow.value = existing.seatRow
-    seatInputNum.value = existing.seatNum
-  } else {
-    seatInputRow.value = ''
-    seatInputNum.value = ''
-  }
-  showSeatModal.value = true
-}
-
-const closeSeatModal = () => {
-  showSeatModal.value = false
-  selectedScheduleForSeat.value = null
-}
-
-const saveSeat = () => {
-  if (!selectedScheduleForSeat.value) return
-  const { date, time } = selectedScheduleForSeat.value
-  
-  // Remove existing
-  mySchedules.value = mySchedules.value.filter(s => !(s.date === date && s.time === time))
-  
-  // Add new if not empty
-  if (seatInputRow.value || seatInputNum.value) {
-    mySchedules.value.push({
-      date,
-      time,
-      seatRow: seatInputRow.value,
-      seatNum: seatInputNum.value
-    })
-  }
-  closeSeatModal()
-}
-
-const deleteSeat = () => {
-  if (!selectedScheduleForSeat.value) return
-  const { date, time } = selectedScheduleForSeat.value
-  
-  if (confirm('이 좌석 일정을 삭제하시겠습니까?')) {
-    mySchedules.value = mySchedules.value.filter(s => !(s.date === date && s.time === time))
-    closeSeatModal()
-  }
-}
-
-const getMySeat = (date, time) => {
-  return mySchedules.value.find(s => s.date === date && s.time === time)
-}
-
-const calendarYear = computed(() => currentMonth.value.getFullYear())
-const calendarMonth = computed(() => currentMonth.value.getMonth())
-
-const calendarDays = computed(() => {
-  const year = calendarYear.value
-  const month = calendarMonth.value
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const firstDay = new Date(year, month, 1).getDay()
-  
-  const days = []
-  for (let i = 0; i < firstDay; i++) days.push(null)
-  for (let i = 1; i <= daysInMonth; i++) days.push(i)
-  return days
-})
-
-const prevMonth = () => {
-  currentMonth.value = new Date(calendarYear.value, calendarMonth.value - 1, 1)
-}
-
-const nextMonth = () => {
-  currentMonth.value = new Date(calendarYear.value, calendarMonth.value + 1, 1)
-}
-
-const selectDate = (year, month, day) => {
-  if (!day) return
-  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  selectedDate.value = dateStr
-}
-
-const hasMySchedule = (year, month, day) => {
-  if (!day) return false
-  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  return mySchedules.value.some(s => s.date === dateStr)
-}
-
-const schedulesForSelectedDate = computed(() => {
-  return schedules.value.filter(s => s.date === selectedDate.value)
-})
-
-// 필터링 및 고정 상태 관리
-const selectedActors = ref({}) // { roleId: [actorName1, actorName2] }
-const pinnedActors = ref({})   // { roleId: actorName }
-
-// 초기화
-roles.value.forEach(role => {
-  selectedActors.value[role.id] = []
-})
-
-const getDayOfWeek = (dateString) => {
-  const days = ['일', '월', '화', '수', '목', '금', '토']
-  const date = new Date(dateString)
-  return days[date.getDay()]
-}
-
-const formatDate = (dateString) => {
-  const date = new Date(dateString)
-  return `${date.getMonth() + 1}월 ${date.getDate()}일`
-}
-
-// 배우 선택/해제 토글
-const toggleActor = (roleId, actor) => {
-  const index = selectedActors.value[roleId].indexOf(actor)
-  if (index > -1) {
-    selectedActors.value[roleId].splice(index, 1)
-  } else {
-    selectedActors.value[roleId].push(actor)
-  }
-}
-
-// 배우 고정/해제 토글
-const togglePin = (roleId, actor) => {
-  if (pinnedActors.value[roleId] === actor) {
-    pinnedActors.value[roleId] = null // 고정 해제
-  } else {
-    pinnedActors.value[roleId] = actor // 고정
-    // 고정 시 선택 목록에도 추가 (없다면)
-    if (!selectedActors.value[roleId].includes(actor)) {
-      selectedActors.value[roleId].push(actor)
-    }
-  }
-}
-
-// 필터링된 스케줄 계산
-const filteredSchedules = computed(() => {
-  return schedules.value.filter(schedule => {
-    // 모든 역할에 대해 검사
-    for (const role of roles.value) {
-      const roleId = role.id
-      const selectedForRole = selectedActors.value[roleId]
-      const pinnedForRole = pinnedActors.value[roleId]
-      
-      // 1. 고정된 배우가 있다면, 해당 스케줄의 캐스팅이 고정된 배우와 일치해야 함
-      if (pinnedForRole && schedule.cast[roleId] !== pinnedForRole) {
-        return false
-      }
-      
-      // 2. 고정된 배우가 없고 선택된 배우가 있다면, 해당 스케줄의 캐스팅이 선택된 배우 중 하나여야 함
-      if (!pinnedForRole && selectedForRole.length > 0 && !selectedForRole.includes(schedule.cast[roleId])) {
-        return false
-      }
-    }
-    return true
-  })
-})
-
-// 전체 보기 (필터 초기화)
-const resetFilters = () => {
-  roles.value.forEach(role => {
-    selectedActors.value[role.id] = []
-    pinnedActors.value[role.id] = null
-  })
-}
-
-// 배우별 출연 횟수 계산
-const actorStats = computed(() => {
-  const stats = {}
-  
-  // 초기화
-  roles.value.forEach(role => {
-    stats[role.id] = {}
-    role.actors.forEach(actor => {
-      stats[role.id][actor] = 0
-    })
-  })
-  
-  // 카운트
-  schedules.value.forEach(schedule => {
-    roles.value.forEach(role => {
-      const actor = schedule.cast[role.id]
-      if (actor && stats[role.id][actor] !== undefined) {
-        stats[role.id][actor]++
-      }
-    })
-  })
-  
-  return stats
-})
-
-// 페어별 출연 횟수 계산
-const pairStats = computed(() => {
-  const stats = {}
-  
-  schedules.value.forEach(schedule => {
-    const mark = schedule.cast.mark
-    const singer = schedule.cast.singer
-    
-    if (!mark || !singer) return
-    
-    const key = `${mark}|||${singer}`
-    if (!stats[key]) {
-      stats[key] = 0
-    }
-    stats[key]++
-  })
-  
-  return stats
-})
-
-// 내 관람(예매) 페어별 횟수 계산
-const myPairStats = computed(() => {
-  const stats = {}
-  mySchedules.value.forEach(mySched => {
-    const schedule = schedules.value.find(s => s.date === mySched.date && s.time === mySched.time)
-    if (schedule && schedule.cast.mark && schedule.cast.singer) {
-      const key = `${schedule.cast.mark}|||${schedule.cast.singer}`
-      if (!stats[key]) {
-        stats[key] = 0
-      }
-      stats[key]++
-    }
-  })
-  return stats
-})
-
-// 내 좌석별 관람 횟수 계산
-const mySeatCounts = computed(() => {
-  const counts = {}
-  mySchedules.value.forEach(s => {
-    if (s.seatRow && s.seatNum) {
-      const key = `${s.seatRow}-${s.seatNum}`
-      counts[key] = (counts[key] || 0) + 1
-    }
-  })
-  return counts
-})
-
-// 배우별 고유 색상 가져오기
-const getActorColorClass = (roleId, actorName) => {
-  const role = roles.value.find(r => r.id === roleId)
-  if (!role) return 'actor-color-default'
-  
-  const index = role.actors.indexOf(actorName)
-  if (index === -1) return 'actor-color-default'
-  
-  if (roleId === 'mark') {
-    const colors = [
-      'actor-color-mark-1',
-      'actor-color-mark-2',
-      'actor-color-mark-3',
-      'actor-color-mark-4'
-    ]
-    return colors[index % colors.length]
-  } else if (roleId === 'singer') {
-    const colors = [
-      'actor-color-singer-1',
-      'actor-color-singer-2',
-      'actor-color-singer-3',
-      'actor-color-singer-4'
-    ]
-    return colors[index % colors.length]
-  }
-  
-  return 'actor-color-alt'
-}
-</script>
-
-
+const newTemplateAndStyle = `
 <template>
   <div class="app-container">
     <div class="main-wrapper">
@@ -565,9 +219,9 @@ const getActorColorClass = (roleId, actorName) => {
                  class="calendar-day"
                  :class="[
                    !day ? 'empty' : '',
-                   day && `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === selectedDate ? 'selected' : '',
-                   day && i % 7 === 0 && `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` !== selectedDate ? 'text-red' : '',
-                   day && i % 7 === 6 && `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` !== selectedDate ? 'text-blue' : ''
+                   day && \`\${calendarYear}-\${String(calendarMonth + 1).padStart(2, '0')}-\${String(day).padStart(2, '0')}\` === selectedDate ? 'selected' : '',
+                   day && i % 7 === 0 && \`\${calendarYear}-\${String(calendarMonth + 1).padStart(2, '0')}-\${String(day).padStart(2, '0')}\` !== selectedDate ? 'text-red' : '',
+                   day && i % 7 === 6 && \`\${calendarYear}-\${String(calendarMonth + 1).padStart(2, '0')}-\${String(day).padStart(2, '0')}\` !== selectedDate ? 'text-blue' : ''
                  ]">
               <span v-if="day" class="day-number">{{ day }}</span>
               <div v-if="hasMySchedule(calendarYear, calendarMonth, day)" class="schedule-dot"></div>
@@ -674,7 +328,7 @@ const getActorColorClass = (roleId, actorName) => {
                   <div class="stat-bar-container">
                     <div class="progress-wrapper">
                       <div class="progress-bg">
-                        <div class="progress-fill" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
+                        <div class="progress-fill" :style="\`width: \${(actorStats[role.id][actor] / schedules.length) * 100}%\`"></div>
                       </div>
                       <div class="tooltip">
                         <div class="tooltip-content">
@@ -713,10 +367,10 @@ const getActorColorClass = (roleId, actorName) => {
                         {{ mark }}
                       </td>
                       <td>{{ singer }}</td>
-                      <td :class="{'text-gray': !(pairStats[`${mark}|||${singer}`] > 0)}">
-                        <span :class="{'highlight': myPairStats[`${mark}|||${singer}`] > 0}">{{ myPairStats[`${mark}|||${singer}`] || 0 }}</span>
+                      <td :class="{'text-gray': !(pairStats[\`\${mark}|||\${singer}\`] > 0)}">
+                        <span :class="{'highlight': myPairStats[\`\${mark}|||\${singer}\`] > 0}">{{ myPairStats[\`\${mark}|||\${singer}\`] || 0 }}</span>
                         <span class="divider">/</span>
-                        <span>{{ pairStats[`${mark}|||${singer}`] || 0 }}회</span>
+                        <span>{{ pairStats[\`\${mark}|||\${singer}\`] || 0 }}회</span>
                       </td>
                     </tr>
                   </template>
@@ -1794,14 +1448,18 @@ $yellow-main: #facc15;
 }
 
 /* Dynamic Colors */
-.actor-color-mark-1 { background-color: #1d4ed8; color: #ffffff; }
-.actor-color-mark-2 { background-color: #3730a3; color: #ffffff; }
-.actor-color-mark-3 { background-color: #0284c7; color: #ffffff; }
-.actor-color-mark-4 { background-color: #155e75; color: #ffffff; }
-.actor-color-singer-1 { background-color: #15803d; color: #ffffff; }
-.actor-color-singer-2 { background-color: #115e59; color: #ffffff; }
-.actor-color-singer-3 { background-color: #059669; color: #ffffff; }
-.actor-color-singer-4 { background-color: #3f6212; color: #ffffff; }
-.actor-color-default { background-color: #444444; color: #d1d5db; }
-.actor-color-alt { background-color: #555555; color: #e5e7eb; }
+.bg-blue-700 { background-color: #1d4ed8; color: #ffffff; }
+.bg-indigo-800 { background-color: #3730a3; color: #ffffff; }
+.bg-sky-600 { background-color: #0284c7; color: #ffffff; }
+.bg-cyan-800 { background-color: #155e75; color: #ffffff; }
+.bg-green-700 { background-color: #15803d; color: #ffffff; }
+.bg-teal-800 { background-color: #115e59; color: #ffffff; }
+.bg-emerald-600 { background-color: #059669; color: #ffffff; }
+.bg-lime-800 { background-color: #3f6212; color: #ffffff; }
+.bg-\\[\\#444444\\] { background-color: #444444; color: #d1d5db; }
+.bg-\\[\\#555555\\] { background-color: #555555; color: #e5e7eb; }
 </style>
+`;
+
+fs.writeFileSync('src/App.vue', scriptContent + "\n\n" + newTemplateAndStyle, 'utf8');
+console.log("Successfully refactored App.vue");
