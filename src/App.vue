@@ -9,15 +9,73 @@ const schedules = ref(showData.schedules)
 const roles = ref(showData.roles)
 
 // 달력 상태 관리
-const currentMonth = ref(new Date(2026, 6, 1)) // 2026년 7월 (언체인 2차 스케줄 기준)
-const selectedDate = ref('2026-07-07')
+const now = new Date()
+const currentMonth = ref(new Date(now.getFullYear(), now.getMonth(), 1)) // 현재 월
+// const selectedDate = ref('2026-07-07')
+const today = () => {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const selectedDate = ref(today())
 
 // 내 일정(좌석) 상태 관리
-const mySchedules = ref([]) // { date, time, seatRow, seatNum }
+import { watch } from 'vue'
+
+const mySchedules = ref(JSON.parse(localStorage.getItem('unchain_my_schedules') || '[]')) // { date, time, seatRow, seatNum }
+
+// mySchedules가 변경될 때마다 localStorage에 저장
+watch(mySchedules, (newVal) => {
+  localStorage.setItem('unchain_my_schedules', JSON.stringify(newVal))
+}, { deep: true })
+
 const showSeatModal = ref(false)
 const selectedScheduleForSeat = ref(null)
 const seatInputRow = ref('')
 const seatInputNum = ref('')
+
+// 설정 및 백업 상태 관리
+const showSettingsModal = ref(false)
+const fileInputRef = ref(null)
+
+const exportData = () => {
+  const dataStr = JSON.stringify(mySchedules.value, null, 2)
+  const blob = new Blob([dataStr], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'unchain_my_schedules_backup.json'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+const importData = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const parsed = JSON.parse(e.target.result)
+      if (Array.isArray(parsed)) {
+        mySchedules.value = parsed
+        alert('데이터를 성공적으로 불러왔습니다.')
+        showSettingsModal.value = false
+      } else {
+        alert('잘못된 데이터 형식입니다.')
+      }
+    } catch (error) {
+      alert('파일을 읽는 중 오류가 발생했습니다.')
+    }
+    // Reset file input
+    event.target.value = ''
+  }
+  reader.readAsText(file)
+}
 
 const handleRowInput = (e) => {
   seatInputRow.value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase()
@@ -221,6 +279,54 @@ const actorStats = computed(() => {
   return stats
 })
 
+// 페어별 출연 횟수 계산
+const pairStats = computed(() => {
+  const stats = {}
+  
+  schedules.value.forEach(schedule => {
+    const mark = schedule.cast.mark
+    const singer = schedule.cast.singer
+    
+    if (!mark || !singer) return
+    
+    const key = `${mark}|||${singer}`
+    if (!stats[key]) {
+      stats[key] = 0
+    }
+    stats[key]++
+  })
+  
+  return stats
+})
+
+// 내 관람(예매) 페어별 횟수 계산
+const myPairStats = computed(() => {
+  const stats = {}
+  mySchedules.value.forEach(mySched => {
+    const schedule = schedules.value.find(s => s.date === mySched.date && s.time === mySched.time)
+    if (schedule && schedule.cast.mark && schedule.cast.singer) {
+      const key = `${schedule.cast.mark}|||${schedule.cast.singer}`
+      if (!stats[key]) {
+        stats[key] = 0
+      }
+      stats[key]++
+    }
+  })
+  return stats
+})
+
+// 내 좌석별 관람 횟수 계산
+const mySeatCounts = computed(() => {
+  const counts = {}
+  mySchedules.value.forEach(s => {
+    if (s.seatRow && s.seatNum) {
+      const key = `${s.seatRow}-${s.seatNum}`
+      counts[key] = (counts[key] || 0) + 1
+    }
+  })
+  return counts
+})
+
 // 배우별 고유 색상 가져오기
 const getActorColorClass = (roleId, actorName) => {
   const role = roles.value.find(r => r.id === roleId)
@@ -258,30 +364,38 @@ const getActorColorClass = (roleId, actorName) => {
     <div class="max-w-6xl mx-auto space-y-6">
       
       <!-- Tab Navigation -->
-      <div class="flex space-x-2 border-b border-[#444444] mb-6">
-        <button
-          @click="activeTab = 'schedule'"
-          class="px-6 py-3 font-medium text-sm transition-colors relative"
-          :class="activeTab === 'schedule' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
-        >
-          출연 일정
-          <div v-if="activeTab === 'schedule'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
-        </button>
-        <button
-          @click="activeTab = 'seat'"
-          class="px-6 py-3 font-medium text-sm transition-colors relative"
-          :class="activeTab === 'seat' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
-        >
-          일정/좌석 정산
-          <div v-if="activeTab === 'seat'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
-        </button>
-        <button
-          @click="activeTab = 'stats'"
-          class="px-6 py-3 font-medium text-sm transition-colors relative"
-          :class="activeTab === 'stats' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
-        >
-          통계
-          <div v-if="activeTab === 'stats'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
+      <div class="flex justify-between items-center border-b border-[#444444] mb-6">
+        <div class="flex overflow-x-auto hide-scrollbar space-x-1 sm:space-x-2 w-full">
+          <button
+            @click="activeTab = 'schedule'"
+            class="px-4 sm:px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap shrink-0"
+            :class="activeTab === 'schedule' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
+          >
+            출연 일정
+            <div v-if="activeTab === 'schedule'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
+          </button>
+          <button
+            @click="activeTab = 'seat'"
+            class="px-4 sm:px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap shrink-0"
+            :class="activeTab === 'seat' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
+          >
+            일정/좌석 정산
+            <div v-if="activeTab === 'seat'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
+          </button>
+          <button
+            @click="activeTab = 'stats'"
+            class="px-4 sm:px-6 py-3 font-medium text-sm transition-colors relative whitespace-nowrap shrink-0"
+            :class="activeTab === 'stats' ? 'text-blue-400' : 'text-gray-400 hover:text-gray-200'"
+          >
+            통계
+            <div v-if="activeTab === 'stats'" class="absolute bottom-0 left-0 w-full h-0.5 bg-blue-500"></div>
+          </button>
+        </div>
+        <button @click="showSettingsModal = true" class="p-3 shrink-0 text-gray-400 hover:text-white transition-colors" title="설정 및 백업">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
         </button>
       </div>
 
@@ -305,7 +419,7 @@ const getActorColorClass = (roleId, actorName) => {
           
           <div class="space-y-4">
             <div v-for="role in roles" :key="role.id" class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div class="w-24 font-medium text-sm text-gray-300">{{ role.name }}</div>
+              <div class="w-20 sm:w-24 shrink-0 font-medium text-sm text-gray-300">{{ role.name }}</div>
               <div class="flex flex-wrap gap-2">
                 <div v-for="actor in role.actors" :key="actor" 
                      class="relative inline-flex items-center rounded-full border transition-all duration-200 cursor-pointer overflow-hidden"
@@ -314,14 +428,14 @@ const getActorColorClass = (roleId, actorName) => {
                        selectedActors[role.id].includes(actor) ? 'border-yellow-400 ring-1 ring-yellow-400 ' + getActorColorClass(role.id, actor) : 
                        'border-transparent hover:border-[#777777] ' + getActorColorClass(role.id, actor)
                      ]">
-                  <button @click="toggleActor(role.id, actor)" class="px-3 py-1.5 text-sm font-medium focus:outline-none flex items-center gap-1.5">
+                  <button @click="toggleActor(role.id, actor)" class="px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm font-medium focus:outline-none flex items-center gap-1.5">
                     <span>{{ actor }}</span>
                   </button>
                   <button @click.stop="togglePin(role.id, actor)" 
-                          class="px-2 py-1.5 border-l border-white/20 hover:bg-white/10 focus:outline-none transition-colors"
+                          class="px-1.5 sm:px-2 py-1 sm:py-1.5 border-l border-white/20 hover:bg-white/10 focus:outline-none transition-colors"
                           :class="pinnedActors[role.id] === actor ? 'border-blue-700 text-blue-400' : 'text-gray-400 hover:text-white'"
                           title="이 배우 고정하기">
-                    <span class="text-xs">{{ pinnedActors[role.id] === actor ? '📌' : '📍' }}</span>
+                    <span class="text-[10px] sm:text-xs">{{ pinnedActors[role.id] === actor ? '📌' : '📍' }}</span>
                   </button>
                 </div>
               </div>
@@ -334,7 +448,7 @@ const getActorColorClass = (roleId, actorName) => {
           <!-- Header -->
           <div class="p-6 md:p-8 border-b border-[#444444] flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
-              <h1 class="text-3xl font-bold text-white mb-2">{{ showData.title }} 출연 일정</h1>
+              <h1 class="text-3xl font-bold text-white mb-2">{{ showData.title }} 스케줄</h1>
               <div class="flex flex-wrap gap-4 text-sm text-gray-400">
                 <span class="flex items-center gap-1">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -359,43 +473,40 @@ const getActorColorClass = (roleId, actorName) => {
           </div>
 
           <!-- Schedule Table -->
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse">
+          <div class="overflow-x-auto hide-scrollbar">
+            <table class="w-full text-left border-collapse min-w-[280px] sm:min-w-[600px]">
               <thead>
-                <tr class="bg-[#2a2a2a] border-b border-[#444444] text-sm uppercase tracking-wider text-gray-400">
-                  <th class="p-4 font-medium sticky left-0 bg-[#2a2a2a] z-10">날짜</th>
-                  <th class="p-4 font-medium">시간</th>
-                  <th v-for="role in roles" :key="role.id" class="p-4 font-medium text-center">
+                <tr class="bg-[#2a2a2a] border-b border-[#444444] text-[10px] sm:text-sm uppercase tracking-wider text-gray-400">
+                  <th class="p-2 sm:p-4 font-medium sticky left-0 bg-[#2a2a2a] z-10 w-16 sm:w-auto">날짜/시간</th>
+                  <th v-for="role in roles" :key="role.id" class="p-2 sm:p-4 font-medium text-center w-16 sm:w-auto">
                     {{ role.name }}
                   </th>
-                  <th class="p-4 font-medium text-center">일정 추가</th>
+                  <th class="p-2 sm:p-4 font-medium text-center w-16 sm:w-auto">일정 추가</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-[#444444]">
                 <tr v-if="filteredSchedules.length === 0">
-                  <td :colspan="roles.length + 3" class="p-12 text-center text-gray-500">
+                  <td :colspan="roles.length + 2" class="p-8 sm:p-12 text-center text-gray-500">
                     <div class="flex flex-col items-center justify-center gap-2">
-                      <span class="text-4xl">🎭</span>
-                      <p>조건에 맞는 공연 일정이 없습니다.</p>
-                      <button @click="resetFilters" class="mt-2 text-blue-400 hover:underline text-sm font-medium">필터 초기화하기</button>
+                      <span class="text-3xl sm:text-4xl">🎭</span>
+                      <p class="text-sm sm:text-base">조건에 맞는 공연 일정이 없습니다.</p>
+                      <button @click="resetFilters" class="mt-2 text-blue-400 hover:underline text-xs sm:text-sm font-medium">필터 초기화하기</button>
                     </div>
                   </td>
                 </tr>
                 <tr v-for="(schedule, index) in filteredSchedules" :key="index" class="hover:bg-[#3a3a3a] transition-colors group" :class="{'bg-blue-900/10': schedule.round === 1}">
-                  <td class="p-4 whitespace-nowrap sticky left-0 z-10 border-r border-[#444444] md:border-r-0 transition-colors" :class="schedule.round === 1 ? 'bg-[#333333] group-hover:bg-[#3a3a3a]' : 'bg-[#333333] group-hover:bg-[#3a3a3a]'">
-                    <div class="flex items-center gap-2">
-                      <div>
-                        <div class="font-medium text-gray-100">{{ formatDate(schedule.date) }}</div>
-                        <div class="text-xs text-gray-400">{{ getDayOfWeek(schedule.date) }}요일</div>
+                  <td class="p-2 sm:p-4 whitespace-nowrap sticky left-0 z-10 border-r border-[#444444] md:border-r-0 transition-colors" :class="schedule.round === 1 ? 'bg-[#333333] group-hover:bg-[#3a3a3a]' : 'bg-[#333333] group-hover:bg-[#3a3a3a]'">
+                    <div class="flex flex-col">
+                      <div class="font-medium text-gray-100 text-xs sm:text-base">{{ formatDate(schedule.date) }}</div>
+                      <div class="text-[9px] sm:text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                        <span>{{ getDayOfWeek(schedule.date) }}요일</span>
+                        <span class="text-blue-400 font-bold">{{ schedule.time }}</span>
                       </div>
                     </div>
                   </td>
-                  <td class="p-4 whitespace-nowrap text-gray-300 font-medium">
-                    {{ schedule.time }}
-                  </td>
-                  <td v-for="role in roles" :key="role.id" class="p-4 text-center">
-                    <div class="flex items-center justify-center gap-1.5">
-                      <span class="inline-block px-3 py-1 rounded-full text-sm font-medium transition-colors" 
+                  <td v-for="role in roles" :key="role.id" class="p-2 sm:p-4 text-center">
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5">
+                      <span class="inline-block px-1.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-sm font-medium transition-colors whitespace-nowrap" 
                             :class="[
                               pinnedActors[role.id] === schedule.cast[role.id] ? 'bg-blue-600 text-white shadow-sm' :
                               selectedActors[role.id].includes(schedule.cast[role.id]) ? 'ring-2 ring-yellow-400 ' + getActorColorClass(role.id, schedule.cast[role.id]) :
@@ -404,23 +515,23 @@ const getActorColorClass = (roleId, actorName) => {
                         {{ schedule.cast[role.id] }}
                       </span>
                       <span v-if="schedule.remarks && schedule.remarks.includes(schedule.cast[role.id] + ' 첫공')" 
-                            class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-orange-900/30 text-orange-400 border border-orange-800/50 whitespace-nowrap">
+                            class="px-1 sm:px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold rounded bg-orange-900/30 text-orange-400 border border-orange-800/50 whitespace-nowrap">
                         첫공
                       </span>
                     </div>
                   </td>
-                  <td class="p-4 text-center">
+                  <td class="p-2 sm:p-4 text-center">
                     <div v-if="getMySeat(schedule.date, schedule.time)" 
                          @click="openSeatModal(schedule)"
-                         class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-900/40 text-blue-300 border border-blue-800 rounded-lg cursor-pointer hover:bg-blue-800/50 transition-colors text-sm font-bold">
+                         class="inline-flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 py-1 sm:py-1.5 bg-blue-900/40 text-blue-300 border border-blue-800 rounded-lg cursor-pointer hover:bg-blue-800/50 transition-colors text-[10px] sm:text-sm font-bold whitespace-nowrap">
                       <span>{{ getMySeat(schedule.date, schedule.time).seatRow }}열 {{ getMySeat(schedule.date, schedule.time).seatNum }}번</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                       </svg>
                     </div>
                     <button v-else @click="openSeatModal(schedule)" 
-                            class="w-8 h-8 rounded-full bg-[#444444] text-gray-300 hover:bg-blue-600 hover:text-white transition-colors flex items-center justify-center mx-auto">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            class="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#444444] text-gray-300 hover:bg-blue-600 hover:text-white transition-colors flex items-center justify-center mx-auto">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                       </svg>
                     </button>
@@ -552,7 +663,7 @@ const getActorColorClass = (roleId, actorName) => {
           선택한 날짜에 공연 일정이 없습니다.
         </div>
 
-        <SeatingChart />
+        <SeatingChart :seatCounts="mySeatCounts" />
       </div>
 
       <!-- Tab 3: Stats Section -->
@@ -576,7 +687,6 @@ const getActorColorClass = (roleId, actorName) => {
                       <div class="w-24 bg-[#444444] rounded-full h-2 overflow-hidden cursor-help">
                         <div class="bg-blue-500 h-full rounded-full" :style="`width: ${(actorStats[role.id][actor] / schedules.length) * 100}%`"></div>
                       </div>
-                      <!-- Tooltip -->
                       <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block z-10 pointer-events-none">
                         <div class="bg-black text-white text-[10px] font-bold rounded py-1 px-2 whitespace-nowrap shadow-lg">
                           {{ Math.round((actorStats[role.id][actor] / schedules.length) * 100) }}%
@@ -598,26 +708,30 @@ const getActorColorClass = (roleId, actorName) => {
             마크&싱어 페어 출연 통계
           </h3>
           <div class="overflow-auto">
-            <table class="min-w-max w-full text-sm border-collapse mt-3">
+            <table class="min-w-max w-full md:w-2/3 lg:w-1/2 text-sm border-collapse mt-3">
               <thead>
                 <tr>
-                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">마크</th>
-                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">싱어</th>
-                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-left">횟수</th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-center">마크</th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-center">싱어</th>
+                  <th class="px-3 py-2 border-b border-[#444444] bg-[#2c2c2c] text-gray-200 text-center">관람 횟수 / 전체</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(count, key) in pairStats" :key="key" v-if="count > 0">
-                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
-                    {{ key.split('|||')[0] }}
-                  </td>
-                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
-                    {{ key.split('|||')[1] }}
-                  </td>
-                  <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
-                    {{ count }}회
-                  </td>
-                </tr>
+                <template v-for="mark in roles.find(r => r.id === 'mark')?.actors" :key="'mark-'+mark">
+                  <tr v-for="(singer, index) in roles.find(r => r.id === 'singer')?.actors" :key="'singer-'+singer" class="hover:bg-[#3a3a3a] transition-colors text-center">
+                    <td v-if="index === 0" :rowspan="roles.find(r => r.id === 'singer')?.actors.length" class="px-3 py-2 border-b border-[#444444] text-gray-100 align-middle bg-[#2a2a2a] font-bold border-r border-[#444444] text-center w-24">
+                      {{ mark }}
+                    </td>
+                    <td class="px-3 py-2 border-b border-[#444444] text-gray-100">
+                      {{ singer }}
+                    </td>
+                    <td class="px-3 py-2 border-b border-[#444444]" :class="{'text-gray-500': !(pairStats[`${mark}|||${singer}`] > 0), 'text-gray-100': pairStats[`${mark}|||${singer}`] > 0}">
+                      <span :class="{'text-blue-400 font-bold': myPairStats[`${mark}|||${singer}`] > 0}">{{ myPairStats[`${mark}|||${singer}`] || 0 }}</span>
+                      <span class="text-gray-500 mx-0.5">/</span>
+                      <span>{{ pairStats[`${mark}|||${singer}`] || 0 }}회</span>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -647,26 +761,60 @@ const getActorColorClass = (roleId, actorName) => {
           <div class="flex-1">
             <label class="block text-xs font-bold text-gray-400 mb-2">열 (Row)</label>
             <input :value="seatInputRow" @input="handleRowInput" type="text" placeholder="예: A" 
-                   class="w-full bg-[#222222] border border-[#444444] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all uppercase">
+                   class="w-full bg-[#222222] border border-[#444444] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all uppercase">
           </div>
           <div class="flex-1">
             <label class="block text-xs font-bold text-gray-400 mb-2">번호 (Number)</label>
             <input :value="seatInputNum" @input="handleNumInput" type="text" inputmode="numeric" placeholder="예: 12" 
-                   class="w-full bg-[#222222] border border-[#444444] rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
+                   class="w-full bg-[#222222] border border-[#444444] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
           </div>
         </div>
         
         <div class="flex gap-3">
           <button v-if="getMySeat(selectedScheduleForSeat.date, selectedScheduleForSeat.time)" 
                   @click="deleteSeat" 
-                  class="flex-1 py-2.5 rounded-lg bg-red-900/40 text-red-400 border border-red-800/50 hover:bg-red-900/60 font-medium transition-colors">
+                  class="flex-1 py-3 rounded-lg bg-red-900/40 text-red-400 border border-red-800/50 hover:bg-red-900/60 font-medium transition-colors">
             삭제
           </button>
-          <button v-else @click="closeSeatModal" class="flex-1 py-2.5 rounded-lg bg-[#444444] text-gray-200 hover:bg-[#555555] font-medium transition-colors">
+          <button v-else @click="closeSeatModal" class="flex-1 py-3 rounded-lg bg-[#444444] text-gray-200 hover:bg-[#555555] font-medium transition-colors">
             취소
           </button>
-          <button @click="saveSeat" class="flex-1 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors shadow-lg shadow-blue-900/20">저장</button>
+          <button @click="saveSeat" class="flex-1 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors shadow-lg shadow-blue-900/20">저장</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div v-if="showSettingsModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" @click="showSettingsModal = false">
+      <div class="bg-[#333333] rounded-xl p-6 w-full max-w-sm border border-[#444444] shadow-2xl" @click.stop>
+        <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          설정 및 백업
+        </h3>
+        
+        <div class="space-y-3 mb-6">
+          <button @click="exportData" class="w-full py-3 rounded-lg bg-[#2a2a2a] text-gray-200 border border-[#444444] hover:bg-[#3a3a3a] transition-colors flex items-center justify-center gap-2 font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            데이터 백업 (JSON 저장)
+          </button>
+          
+          <button @click="$refs.fileInputRef.click()" class="w-full py-3 rounded-lg bg-[#2a2a2a] text-gray-200 border border-[#444444] hover:bg-[#3a3a3a] transition-colors flex items-center justify-center gap-2 font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            데이터 불러오기 (JSON 열기)
+          </button>
+          <input type="file" ref="fileInputRef" accept=".json" class="hidden" @change="importData">
+        </div>
+        
+        <button @click="showSettingsModal = false" class="w-full py-2.5 rounded-lg bg-[#444444] text-gray-200 hover:bg-[#555555] font-medium transition-colors">
+          닫기
+        </button>
       </div>
     </div>
 
@@ -675,4 +823,11 @@ const getActorColorClass = (roleId, actorName) => {
 
 <style>
 /* Add any custom styles here if needed, Tailwind handles most things */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 </style>

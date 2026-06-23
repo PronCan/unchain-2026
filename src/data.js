@@ -1,7 +1,7 @@
 export const showData = {
   title: "언체인",
-  period: "6월 16일 ~ 7월 16일",
-  venue: "예스24 스테이지 2관", // 이미지에 없어 임의로 작성했습니다.
+  period: "6월 16일 ~ 9월 6일",
+  venue: "예스24 스테이지 2관",
   totalShows: 26,
   roles: [
     {
